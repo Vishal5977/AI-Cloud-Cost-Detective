@@ -1,0 +1,5 @@
+cost_reports/
+__pycache__/
+*.pyc
+aws.exe
+.env
