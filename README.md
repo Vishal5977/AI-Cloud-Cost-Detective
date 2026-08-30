@@ -1,62 +1,59 @@
 # AI Cloud Cost Detective (AWS + Claude)
 
-An AI-powered tool that scans an AWS region using the AWS CLI, detects cost
-waste and misconfigurations, and generates a Markdown report with specific,
-actionable fix commands.
+A command-line tool that scans an AWS region using the AWS CLI, identifies possible cost waste and configuration risks, and generates a Markdown report with actionable remediation guidance.
 
-This is a scoped-down, AWS-native rebuild of [Abhishek Veeramalla's AI-Cloud-Cost-Detective](https://github.com/iam-veeramalla/AI-Cloud-Cost-Detective),
-which used Azure CLI + a full React/FastAPI/PostgreSQL/JWT stack with the
-OpenAI API. This version:
+## Architecture
 
-- Targets **AWS** instead of Azure (matches AWS Certified Cloud Practitioner
-  background and target DevOps/Cloud roles)
-- Uses the **Claude API** instead of OpenAI
-- Is a **single-user CLI tool**, not a multi-tenant web app — no auth/JWT/
-  WebSockets/database, since there's only one user (whoever runs it) and no
-  need to authenticate sessions for a local script
-- Uses a **read-only IAM user** for all AWS access — the tool can only
-  describe/list resources, never modify or delete anything
+```mermaid
+flowchart LR
+    A[Read-only AWS CLI profile] --> B[Python collector]
+    B --> C[AWS resource and cost data]
+    C --> D[Assessment prompt]
+    D --> E[Claude API]
+    E --> F[Markdown cost report]
+```
+
+## Implementation Scope
+
+This AWS-native implementation:
+
+- Collects EC2, EBS, Elastic IP, load balancer, RDS, S3, and Cost Explorer data through the AWS CLI.
+- Uses a read-only AWS CLI profile; it does not create, modify, or delete AWS resources.
+- Sends collected data together with an assessment prompt to the Claude API.
+- Persists the generated report locally in the `cost_reports/` directory.
+
+The project is inspired by [Abhishek Veeramalla's AI-Cloud-Cost-Detective](https://github.com/iam-veeramalla/AI-Cloud-Cost-Detective). This version is scoped to AWS and implemented as a single-user Python CLI rather than a multi-tenant web application.
 
 ## What It Detects
 
-- **Over-provisioned resources** — EC2/RDS instances larger than the
-  workload appears to need
-- **Unused/orphaned resources** — unattached EBS volumes, unassociated
-  Elastic IPs, load balancers with no healthy targets
-- **Misconfigurations** — resources running 24/7 without Reserved
-  Instances/Savings Plans, missing auto-shutdown patterns
-- **Storage & logging costs** — S3 buckets with no lifecycle policy
-- **Cost breakdown** — top AWS services by spend, from Cost Explorer
+- Potentially over-provisioned EC2 and RDS resources
+- Unattached EBS volumes and unassociated Elastic IPs
+- Load balancers without healthy targets
+- S3 buckets without lifecycle policies
+- Cost breakdown by AWS service for the previous 30 days
 
-## Tech Stack
+## Technology Stack
 
 - Python 3
-- [Anthropic Claude API](https://docs.claude.com) (`anthropic` SDK)
-- AWS CLI (read-only access, called via `subprocess`)
+- AWS CLI
+- AWS services: EC2, EBS, Elastic IP, ELBv2, RDS, S3, Cost Explorer
+- Anthropic Claude API
 
-## Security
+## Security Design
 
-This tool is built around **least-privilege access**:
-
-- All AWS access uses a dedicated IAM user with a **read-only policy**
-  (e.g., `ec2:Describe*`, `rds:Describe*`, `s3:ListAllMyBuckets`,
-  `ce:GetCostAndUsage`) — it cannot create, modify, or delete anything
-- AWS credentials are configured via a named CLI profile, never hardcoded
-- No credentials, tokens, or account data are committed to this repo
+- AWS access is intended to use a dedicated read-only IAM policy.
+- Credentials are supplied through a named AWS CLI profile and are not hardcoded.
+- API keys are supplied through the `ANTHROPIC_API_KEY` environment variable.
+- Generated reports are written locally.
 
 ## Setup
 
 ```bash
 pip install -r requirements.txt
-```
-
-Configure a read-only AWS CLI profile:
-
-```bash
 aws configure --profile cost-detective-readonly
 ```
 
-Set your Claude API key:
+Set the Claude API key:
 
 ```bash
 # Windows (cmd)
@@ -72,29 +69,22 @@ export ANTHROPIC_API_KEY=your_key_here
 python cost_detective.py --region ap-south-1 --profile cost-detective-readonly
 ```
 
-This will:
-- Run read-only AWS CLI commands across EC2, EBS, EIPs, ELB, RDS, S3, and
-  Cost Explorer
-- Send the collected data + assessment prompt to Claude
-- Print the report to the terminal
-- Save it to `cost_reports/cost_report_<region>_<timestamp>.md`
+The script writes a report to:
 
-## Project Structure
-
+```text
+cost_reports/cost_report_<region>_<timestamp>.md
 ```
+
+## Repository Structure
+
+```text
 .
-├── prompt.md              # The cost-analysis prompt Claude follows
-├── cost_detective.py      # Collects AWS CLI data and calls the Claude API
-├── requirements.txt       # Python dependency (anthropic)
+├── prompt.md              # Assessment prompt template
+├── cost_detective.py      # AWS CLI data collection and report generation
+├── requirements.txt       # Python dependency
 └── cost_reports/          # Generated reports (git-ignored)
 ```
 
-## Why This Project
+## Next Evidence to Add
 
-Built to combine two things directly relevant to Cloud/DevOps roles — AWS
-resource management and AI-assisted tooling — into something that produces
-an actionable cost-savings report instead of a generic chatbot wrapper.
-
-## Credits
-
-Concept inspired by [iam-veeramalla/AI-Cloud-Cost-Detective](https://github.com/iam-veeramalla/AI-Cloud-Cost-Detective).
+A sanitized, real report generated from a test AWS account will be added here after execution.
